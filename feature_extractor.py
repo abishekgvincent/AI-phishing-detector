@@ -1,60 +1,108 @@
 import re
-import tldextract
+import socket
+import requests
+from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 
-def extract_features (url):
-    parsed = urlparse(url if "://" in url else "http://" + url)
-    hostname = parsed.hostname or ""
-    path = parsed.path or ""
-    query = parsed.query or ""
-    full = url if isinstance(url, str) else str(url)
+# Common sensitive words and brands list
+SENSITIVE_WORDS = ["login", "secure", "account", "update", "verify", "password", "bank"]
+BRAND_NAMES = ["paypal", "sbi", "hdfc", "amazon", "apple", "microsoft", "google"]
 
-    num_digits = sum(c.isdigit() for c in full)
-    ext = tldextract.extract(full)
-    subdomain_parts = ext.subdomain.split('.') if ext.subdomain else []
-    subdomain_level = len([p for p in subdomain_parts if p])
+def extract_features(url):
+    features = {f: 0 for f in [
+        'PctExtHyperlinks', 'PctExtResourceUrls', 'PctNullSelfRedirectHyperlinks',
+        'PctExtNullSelfRedirectHyperlinksRT', 'NumNumericChars', 'FrequentDomainNameMismatch',
+        'ExtMetaScriptLinkRT', 'NumDash', 'SubmitInfoToEmail', 'NumDots', 'PathLength',
+        'QueryLength', 'PathLevel', 'InsecureForms', 'UrlLength', 'NumSensitiveWords',
+        'NumQueryComponents', 'PctExtResourceUrlsRT', 'IframeOrFrame', 'HostnameLength',
+        'NumAmpersand', 'AbnormalExtFormActionR', 'UrlLengthRT', 'NumDashInHostname',
+        'IpAddress', 'AbnormalFormAction', 'EmbeddedBrandName', 'NumUnderscore',
+        'MissingTitle', 'DomainInPaths', 'SubdomainLevel', 'ExtFormAction'
+    ]}
 
-    features = {
-        "NumDots": hostname.count("."),
-        "SubdomainLevel": max(0, subdomain_level),
-        "PathLevel": path.count("/"),
-        "UrlLength": len(full),
-        "NumDash": full.count("-"),
-        "NumDashInHostname": hostname.count("-"),
-        "AtSymbol": 1 if "@" in full else 0,
-        "TildeSymbol": 1 if "~" in full else 0,
-        "NumUnderscore": full.count("_"),
-        "NumPercent": full.count("%"),
-        "NumQueryComponents": query.count("="),
-        "NumAmpersand": query.count("&"),
-        "NumHash": full.count("#"),
-        "NumNumericChars": num_digits,
-        "NoHttps": 0 if parsed.scheme == "https" else 1,
-        "RandomString": 0,  # placeholder; we compute heuristic below
-        "IpAddress": 1 if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", hostname) else 0,
-        "DomainInSubdomains": 1 if ext.domain and ext.domain in ext.subdomain else 0,
-        "DomainInPaths": 1 if ext.domain and ext.domain in path else 0,
-        "HttpsInHostname": 1 if "https" in hostname else 0,
-        "HostnameLength": len(hostname),
-        "PathLength": len(path),
-        "QueryLength": len(query),
-        "DoubleSlashInPath": 1 if "//" in path else 0
-    }
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname or ""
+        path = parsed.path or ""
+        query = parsed.query or ""
 
-    def token_entropy(s):
-        import math
-        from collections import Counter
-        if not s:
-            return 0.0
-        c = Counter(s)
-        probs = [v/len(s) for v in c.values()]
-        return -sum(p * math.log2(p) for p in probs)
+        # ---- URL-based Features ----
+        features['NumNumericChars'] = sum(c.isdigit() for c in url)
+        features['NumDash'] = url.count('-')
+        features['NumDots'] = url.count('.')
+        features['PathLength'] = len(path)
+        features['QueryLength'] = len(query)
+        features['PathLevel'] = path.count('/')
+        features['UrlLength'] = len(url)
+        features['NumQueryComponents'] = query.count('&') + 1 if query else 0
+        features['HostnameLength'] = len(hostname)
+        features['NumAmpersand'] = url.count('&')
+        features['UrlLengthRT'] = len(url) / (len(hostname) + 1)
+        features['NumDashInHostname'] = hostname.count('-')
+        features['IpAddress'] = 1 if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", hostname) else 0
+        features['NumUnderscore'] = url.count('_')
+        features['DomainInPaths'] = 1 if hostname.split('.')[0] in path else 0
+        features['SubdomainLevel'] = hostname.count('.') - 1
+        features['EmbeddedBrandName'] = any(b in url.lower() for b in BRAND_NAMES)
 
-    tokens = re.split(r"[\/\-\_\?\=\&\.]", path + query)
-    long_tokens = [t for t in tokens if len(t) >= 8]
-    entropies = [token_entropy(t) for t in long_tokens]
-    features["RandomString"] = 1 if (len(long_tokens) > 0 and max(entropies) > 3.5) else 0
+        # ---- Fetch page ----
+        resp = requests.get(url, timeout=5, headers={'User-Agent':'Mozilla/5.0'})
+        html = resp.text
+        soup = BeautifulSoup(html, "html.parser")
+
+        # Title check
+        features['MissingTitle'] = 1 if not soup.title else 0
+
+        # Hyperlinks
+        links = [a.get("href") for a in soup.find_all("a", href=True)]
+        if links:
+            ext_links = [l for l in links if hostname not in l]
+            null_self_links = [l for l in links if l in ["#", "javascript:void(0)"]]
+            features['PctExtHyperlinks'] = len(ext_links) / len(links)
+            features['PctNullSelfRedirectHyperlinks'] = len(null_self_links) / len(links)
+            features['PctExtNullSelfRedirectHyperlinksRT'] = (len(ext_links)+len(null_self_links)) / len(links)
+
+        # External resources
+        resources = soup.find_all(["img", "script", "link"])
+        if resources:
+            ext_resources = [r for r in resources if r.get("src") and hostname not in r.get("src")]
+            features['PctExtResourceUrls'] = len(ext_resources) / len(resources)
+            features['PctExtResourceUrlsRT'] = len(ext_resources) / len(resources)
+
+        # Meta/Script/Link external ratio
+        metascripts = soup.find_all(["meta", "script", "link"])
+        if metascripts:
+            ext_meta = [m for m in metascripts if (m.get("src") or m.get("href")) and hostname not in str(m)]
+            features['ExtMetaScriptLinkRT'] = len(ext_meta) / len(metascripts)
+
+        # Forms
+        forms = soup.find_all("form")
+        for form in forms:
+            action = form.get("action") or ""
+            if "mailto:" in action:
+                features['SubmitInfoToEmail'] = 1
+            if action.startswith("http://"):
+                features['InsecureForms'] = 1
+            if hostname not in action and action != "":
+                features['AbnormalFormAction'] = 1
+                features['AbnormalExtFormActionR'] += 1
+            if "http" in action and hostname not in action:
+                features['ExtFormAction'] = 1
+
+        # Sensitive words in content
+        features['NumSensitiveWords'] = sum(w in html.lower() for w in SENSITIVE_WORDS)
+
+        # Iframe/Frame
+        features['IframeOrFrame'] = 1 if soup.find("iframe") or soup.find("frame") else 0
+
+    except Exception as e:
+        print("Error extracting:", e)
 
     return features
 
-print(extract_features("https://www.google.com/search?gs_ssp=eJzj4tTP1TcwMU02T1JgNGB0YPBiS8_PT89JBQBASQXT&q=google&ie=UTF-8"))
+
+# Example test
+if __name__ == "__main__":
+    test_url = "https://www.hugedomains.com/domain_profile.cfm?d=cryptonight.net"
+    feats = extract_features(test_url)
+    print(feats)

@@ -1,8 +1,7 @@
 import joblib
 import pandas as pd
 
-url_features = {
-    'NumDots': 2, 'SubdomainLevel': 1, 'PathLevel': 1, 'UrlLength': 99, 'NumDash': 1, 'NumDashInHostname': 0, 'AtSymbol': 0, 'TildeSymbol': 0, 'NumUnderscore': 2, 'NumPercent': 0, 'NumQueryComponents': 3, 'NumAmpersand': 2, 'NumHash': 0, 'NumNumericChars': 10, 'NoHttps': 0, 'RandomString': 1, 'IpAddress': 0, 'DomainInSubdomains': 0, 'DomainInPaths': 0, 'HttpsInHostname': 0, 'HostnameLength': 14, 'PathLength': 7, 'QueryLength': 69, 'DoubleSlashInPath': 0 }
+url_features = {'PctExtHyperlinks': 1.0, 'PctExtResourceUrls': 0.5555555555555556, 'PctNullSelfRedirectHyperlinks': 0.07936507936507936, 'PctExtNullSelfRedirectHyperlinksRT': 1.0793650793650793, 'NumNumericChars': 0, 'FrequentDomainNameMismatch': 0, 'ExtMetaScriptLinkRT': 0.5, 'NumDash': 0, 'SubmitInfoToEmail': 0, 'NumDots': 4, 'PathLength': 19, 'QueryLength': 17, 'PathLevel': 1, 'InsecureForms': 0, 'UrlLength': 64, 'NumSensitiveWords': 5, 'NumQueryComponents': 1, 'PctExtResourceUrlsRT': 0.5555555555555556, 'IframeOrFrame': 1, 'HostnameLength': 19, 'NumAmpersand': 0, 'AbnormalExtFormActionR': 3, 'UrlLengthRT': 3.2, 'NumDashInHostname': 0, 'IpAddress': 0, 'AbnormalFormAction': 1, 'EmbeddedBrandName': False, 'NumUnderscore': 1, 'MissingTitle': 0, 'DomainInPaths': 0, 'SubdomainLevel': 1, 'ExtFormAction': 1}
 
 loaded_model = joblib.load('phishing_model.pkl')
 feature_cols = joblib.load('feature_columns.pkl')
