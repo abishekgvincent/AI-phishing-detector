@@ -1,1 +1,4 @@
 phishing_model/
+node_modules
+phish_urls_simple.db
+phish_lists.db
