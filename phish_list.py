@@ -10,13 +10,11 @@ from urllib.parse import urlparse
 
 DB_PATH = "phish_urls_simple.db"
 
-# Put your list URLs here. If you have github.com blob links that's fine (auto-converted).
 SOURCES = [
-    # example working raw sources; replace/add as you like
     "https://github.com/Phishing-Database/Phishing.Database/blob/master/phishing-links-ACTIVE.txt"
 ]
 
-# How many inserts to buffer in a single transaction (tweak for performance)
+
 BATCH_SIZE = 9000
 
 # HTTP timeout for requests
@@ -37,7 +35,6 @@ def init_db(path=DB_PATH):
             last_seen TEXT
         );
     """)
-    # performance pragmas
     cur.execute("PRAGMA journal_mode=WAL;")
     cur.execute("PRAGMA synchronous=NORMAL;")
     conn.commit()
@@ -54,7 +51,6 @@ def to_raw_github_url(url: str) -> str:
     """
     if "github.com" not in url:
         return url
-    # expect format: https://github.com/<owner>/<repo>/blob/<branch>/<path>
     parsed = urlparse(url)
     parts = parsed.path.split("/")
     # minimal validation
@@ -93,19 +89,17 @@ def stream_and_store_source(conn, src_url: str, batch_size=BATCH_SIZE):
             line = raw_line.strip()
             if not line:
                 continue
-            # skip comment lines commonly present in lists
+
             if line.startswith("#") or line.startswith("//"):
                 continue
-            # We intentionally DO NOT modify the URL contents beyond stripping whitespace.
+
             buffer.append((line, src_for_db, now))
             count_total += 1
-            # flush batch
             if len(buffer) >= batch_size:
                 cur.executemany(insert_sql, buffer)
                 conn.commit()
                 print(f"[INFO] inserted {count_total} rows so far from this source...", end="\r")
                 buffer = []
-        # flush remaining
         if buffer:
             cur.executemany(insert_sql, buffer)
             conn.commit()

@@ -41,7 +41,7 @@ for c in int_cols:
 
 def train_model(data, top_n):
     top_n_features = mi_scores.sort_values(ascending=False).head(top_n).index.tolist()
-    print (top_n_features)
+    # print (top_n_features)
     # top_n_features = data.columns[:top_n]
     X=data[top_n_features]#.drop(['id'],axis=1)
     y=data['labels']
@@ -49,10 +49,10 @@ def train_model(data, top_n):
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=True)
 
     model = RandomForestClassifier(
-            n_estimators=200,      # number of trees
-            max_depth=None,       # let trees grow fully
+            n_estimators=200,
+            max_depth=None,
             random_state=42,
-            class_weight="balanced"  # handle imbalance if present
+            class_weight="balanced"
         )
     model.fit(X_train, y_train)
 
@@ -63,7 +63,7 @@ def train_model(data, top_n):
     f1 = f1_score(y_test, y_pred)
     accuracy = accuracy_score(y_test, y_pred)
 
-    print("Precision:", precision, "Recall:", recall, "F1:", f1, "Accuracy:", accuracy)
+    print("Precision:", precision, "\nRecall:", recall, "\nF1:", f1, "\nAccuracy:", accuracy)
 
     return model,top_n_features
 
